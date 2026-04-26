@@ -1,97 +1,33 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import './index.css'
+import { useDashboard } from './hooks/useDashboard'
+import { useWiki } from './hooks/useWiki'
 
-// ─── Mock data ──────────────────────────────────────────────────────────────
-
-const insight = {
-  message: "Dave hasn't responded to your quote for the boiler job in 4 days. Want me to chase him?",
-  context: 'Quote #38 · £1,840',
-}
-
-const quickActions = [
-  { id: 'log',      icon: '🔧', label: 'Log a new job',          sub: 'Voice or type' },
-  { id: 'quote',   icon: '📋', label: 'Create a quote',         sub: 'Fast & professional' },
-  { id: 'chase',   icon: '💬', label: 'Chase unpaid invoices',  sub: '3 outstanding' },
-  { id: 'schedule',icon: '📅', label: "This week's schedule",   sub: '6 jobs booked' },
-  { id: 'summary', icon: '📊', label: "How's business going?",  sub: 'Plain English summary' },
-]
-
-const activity = [
-  { id: 1, icon: '✉️', text: 'Sent follow-up to Mrs Patterson about the bathroom quote',     time: '2 hours ago' },
-  { id: 2, icon: '📍', text: 'Reminder set for Thursday callout at 14 Elm Street',           time: 'Yesterday'   },
-  { id: 3, icon: '✅', text: 'Invoice #47 marked as paid — £380 received from Mr Clarke',    time: 'Yesterday'   },
-  { id: 4, icon: '📋', text: 'Quote #38 sent to Dave Hargreaves — £1,840 for full boiler swap', time: '4 days ago' },
-  { id: 5, icon: '🔧', text: 'New job logged — leaking radiator valve, 22 Brook Lane',       time: '5 days ago'  },
-]
-
-const stats = {
-  monthRevenue: '£6,240',
-  outstanding: '£2,150',
-  jobsThisMonth: 14,
-  openQuotes: 5,
-}
+// ─── Category config (IDs match the database) ────────────────────────────────
 
 const wikiCategories = [
-  { id: 'fault-diagnosis', label: 'Fault Diagnosis',   icon: '🔍', count: 12 },
-  { id: 'pricing',         label: 'Pricing & Quoting', icon: '💷', count: 8  },
-  { id: 'client-notes',    label: 'Client Notes',      icon: '👤', count: 23 },
-  { id: 'suppliers',       label: 'Parts & Suppliers', icon: '📦', count: 6  },
-  { id: 'tips',            label: 'Tips & Tricks',     icon: '💡', count: 9  },
+  { id: 'fault_diagnosis',  label: 'Fault Diagnosis',   icon: '🔍' },
+  { id: 'pricing_quoting',  label: 'Pricing & Quoting', icon: '💷' },
+  { id: 'client_notes',     label: 'Client Notes',      icon: '👤' },
+  { id: 'parts_suppliers',  label: 'Parts & Suppliers', icon: '📦' },
+  { id: 'tips_tricks',      label: 'Tips & Tricks',     icon: '💡' },
 ]
 
-const wikiEntries = [
-  {
-    id: 1,
-    category: 'fault-diagnosis',
-    title: 'Vaillant ecoTEC — F28 error',
-    body: "Nine times out of ten it's the ignition lead, not the gas valve. Check the lead first — saves you a solid hour and the part's about £12 from Heatparts. Only replace the gas valve if the lead checks out fine.",
-    tags: ['Vaillant', 'boiler', 'F28'],
-    added: '3 days ago',
-    source: 'voice',
-  },
-  {
-    id: 2,
-    category: 'client-notes',
-    title: 'Mrs Chen — 14 Elm Street',
-    body: "Access to the stopcock is behind the washing machine in the kitchen — pull it out to get to it. A slim wrench is essential, a normal one won't fit. She's usually in until 11am and prefers a call before you arrive, not a text.",
-    tags: ['access', 'stopcock', 'slim wrench'],
-    added: '1 week ago',
-    source: 'voice',
-  },
-  {
-    id: 3,
-    category: 'pricing',
-    title: 'Standard bathroom refit — pricing',
-    body: "For a standard bathroom in a semi, quote between £4,500 and £6,000 depending on the suite they've picked. Takes about 5 days with a mate helping. Always add £200 contingency for tiling surprises — especially in older houses where nothing's square.",
-    tags: ['bathroom', 'refit', 'pricing'],
-    added: '2 weeks ago',
-    source: 'text',
-  },
-  {
-    id: 4,
-    category: 'tips',
-    title: 'Speedfit push-fit on old copper',
-    body: "Deburr properly and give it a good wipe before pushing in. Older copper that's been soldered can be slightly oval — check it before trusting the fitting. Had one fail on a refit because I skipped this. Use a pipe insert on anything over 15mm to be safe.",
-    tags: ['Speedfit', 'push-fit', 'copper'],
-    added: '3 weeks ago',
-    source: 'voice',
-  },
-  {
-    id: 5,
-    category: 'suppliers',
-    title: 'JC Plumbing Supplies — ask for John',
-    body: "Best trade prices on Grundfos pumps locally. John can usually knock 10% off if you're buying in bulk — doesn't advertise it. They stock the full Vaillant ecoTEC range and are usually next day on most boiler parts.",
-    tags: ['supplier', 'Grundfos', 'Vaillant'],
-    added: '1 month ago',
-    source: 'text',
-  },
+// ─── Quick actions (static) ───────────────────────────────────────────────────
+
+const quickActions = [
+  { id: 'log',      icon: '🔧', label: 'Log a new job',         sub: 'Voice or type' },
+  { id: 'quote',    icon: '📋', label: 'Create a quote',        sub: 'Fast & professional' },
+  { id: 'chase',    icon: '💬', label: 'Chase unpaid invoices', sub: '3 outstanding' },
+  { id: 'schedule', icon: '📅', label: "This week's schedule",  sub: '6 jobs booked' },
+  { id: 'summary',  icon: '📊', label: "How's business going?", sub: 'Plain English summary' },
 ]
 
 // Pre-canned voice note that appears after the mic "records"
 const DEMO_TRANSCRIPT =
   "Ideal Logic boiler — if you get an F1 fault, check the pressure first, always. Nine times out of ten it just needs topping up to 1.5 bar. Two minutes, saves you diagnosing a sensor."
 
-// ─── Icons ──────────────────────────────────────────────────────────────────
+// ─── Icons ────────────────────────────────────────────────────────────────────
 
 function MicIcon({ size = 20, color = 'white' }) {
   return (
@@ -111,10 +47,10 @@ function SearchIcon() {
   )
 }
 
-// ─── Dashboard — Insight card ───────────────────────────────────────────────
+// ─── Dashboard — Insight card ─────────────────────────────────────────────────
 
-function InsightCard({ onYes, onLater, dismissed }) {
-  if (dismissed) return null
+function InsightCard({ insight, onYes, onLater, dismissed }) {
+  if (dismissed || !insight) return null
 
   return (
     <div className="mx-4 mt-4 rounded-2xl overflow-hidden shadow-md">
@@ -135,7 +71,7 @@ function InsightCard({ onYes, onLater, dismissed }) {
             style={{ background: '#2C6E49' }}
             className="flex-1 py-3 rounded-xl text-white font-semibold text-[15px] active:opacity-80 transition-opacity"
           >
-            Yes, chase him
+            Yes, chase them
           </button>
           <button
             onClick={onLater}
@@ -149,9 +85,23 @@ function InsightCard({ onYes, onLater, dismissed }) {
   )
 }
 
-// ─── Dashboard — Stats row ──────────────────────────────────────────────────
+// ─── Dashboard — Stats row ────────────────────────────────────────────────────
 
-function StatsRow() {
+function StatsRow({ stats, loading }) {
+  if (loading || !stats) {
+    return (
+      <div className="mx-4 mt-4 grid grid-cols-2 gap-3">
+        {[0, 1].map((i) => (
+          <div key={i} className="bg-white rounded-2xl px-4 py-3 shadow-sm animate-pulse">
+            <div className="h-2.5 w-16 bg-gray-200 rounded mb-2" />
+            <div className="h-7 w-24 bg-gray-200 rounded mb-1.5" />
+            <div className="h-2 w-20 bg-gray-200 rounded" />
+          </div>
+        ))}
+      </div>
+    )
+  }
+
   return (
     <div className="mx-4 mt-4 grid grid-cols-2 gap-3">
       <div className="bg-white rounded-2xl px-4 py-3 shadow-sm">
@@ -169,7 +119,7 @@ function StatsRow() {
   )
 }
 
-// ─── Dashboard — Quick actions ──────────────────────────────────────────────
+// ─── Dashboard — Quick actions ────────────────────────────────────────────────
 
 function QuickActions({ onAction }) {
   return (
@@ -197,9 +147,39 @@ function QuickActions({ onAction }) {
   )
 }
 
-// ─── Dashboard — Activity feed ──────────────────────────────────────────────
+// ─── Dashboard — Activity feed ────────────────────────────────────────────────
 
-function ActivityFeed() {
+function ActivityFeed({ activity, loading }) {
+  if (loading) {
+    return (
+      <div className="mt-6 px-4 mb-6">
+        <p className="text-gray-400 text-[11px] font-semibold uppercase tracking-widest mb-3">Recent activity</p>
+        <div className="bg-white rounded-2xl shadow-sm overflow-hidden animate-pulse">
+          {[0, 1, 2, 3, 4].map((i) => (
+            <div key={i} className={`flex items-start gap-3 px-4 py-3.5 ${i < 4 ? 'border-b border-gray-100' : ''}`}>
+              <div className="w-6 h-6 bg-gray-200 rounded-full mt-0.5 shrink-0" />
+              <div className="flex-1">
+                <div className="h-3 bg-gray-200 rounded w-4/5 mb-2" />
+                <div className="h-2 bg-gray-200 rounded w-20" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  if (!activity.length) {
+    return (
+      <div className="mt-6 px-4 mb-6">
+        <p className="text-gray-400 text-[11px] font-semibold uppercase tracking-widest mb-3">Recent activity</p>
+        <div className="bg-white rounded-2xl shadow-sm px-4 py-8 text-center">
+          <p className="text-gray-400 text-[14px]">No activity yet — get started with a quick action above.</p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="mt-6 px-4 mb-6">
       <p className="text-gray-400 text-[11px] font-semibold uppercase tracking-widest mb-3">
@@ -225,12 +205,13 @@ function ActivityFeed() {
   )
 }
 
-// ─── Wiki — Add knowledge modal ─────────────────────────────────────────────
+// ─── Wiki — Add knowledge modal ───────────────────────────────────────────────
 
 function AddKnowledgeModal({ onClose, onSaved }) {
   const [step, setStep] = useState('idle')   // idle | recording | done
   const [text, setText] = useState('')
   const [category, setCategory] = useState('')
+  const [saving, setSaving] = useState(false)
 
   const handleMicTap = () => {
     if (step !== 'idle') return
@@ -239,6 +220,24 @@ function AddKnowledgeModal({ onClose, onSaved }) {
       setText(DEMO_TRANSCRIPT)
       setStep('done')
     }, 2000)
+  }
+
+  const handleSave = async () => {
+    if (!text.trim() || saving) return
+    setSaving(true)
+    try {
+      const trimmed = text.trim()
+      const title = trimmed.length > 60 ? trimmed.slice(0, 57) + '...' : trimmed
+      await onSaved({
+        title,
+        content: trimmed,
+        category: category || 'tips_tricks',
+        source: step === 'done' ? 'voice' : 'text',
+        tags: [],
+      })
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -302,18 +301,19 @@ function AddKnowledgeModal({ onClose, onSaved }) {
 
         {/* Save */}
         <button
-          onClick={() => text.trim() && onSaved()}
+          onClick={handleSave}
+          disabled={saving || !text.trim()}
           className="mt-4 w-full py-3.5 rounded-xl text-white font-semibold text-[15px] transition-opacity active:opacity-80"
-          style={{ background: '#2C6E49', opacity: text.trim() ? 1 : 0.4 }}
+          style={{ background: '#2C6E49', opacity: text.trim() && !saving ? 1 : 0.4 }}
         >
-          Save to wiki
+          {saving ? 'Saving...' : 'Save to wiki'}
         </button>
       </div>
     </div>
   )
 }
 
-// ─── Wiki — Entry detail modal ──────────────────────────────────────────────
+// ─── Wiki — Entry detail modal ────────────────────────────────────────────────
 
 function EntryDetailModal({ entry, onClose }) {
   const cat = wikiCategories.find((c) => c.id === entry.category)
@@ -337,7 +337,7 @@ function EntryDetailModal({ entry, onClose }) {
 
         {/* Tags */}
         <div className="flex gap-2 flex-wrap mb-4">
-          {entry.tags.map((tag) => (
+          {(entry.tags || []).map((tag) => (
             <span key={tag} className="px-2.5 py-1 bg-gray-100 rounded-full text-[12px] text-gray-500">
               {tag}
             </span>
@@ -364,7 +364,7 @@ function EntryDetailModal({ entry, onClose }) {
   )
 }
 
-// ─── Wiki screen ────────────────────────────────────────────────────────────
+// ─── Wiki screen ──────────────────────────────────────────────────────────────
 
 function WikiScreen({ showToast }) {
   const [searchQuery, setSearchQuery] = useState('')
@@ -372,20 +372,35 @@ function WikiScreen({ showToast }) {
   const [selectedEntry, setSelectedEntry] = useState(null)
   const [showAddModal, setShowAddModal] = useState(false)
 
-  const filteredEntries = wikiEntries.filter((entry) => {
-    const q = searchQuery.toLowerCase()
-    const matchesSearch =
-      !q ||
-      entry.title.toLowerCase().includes(q) ||
-      entry.body.toLowerCase().includes(q) ||
-      entry.tags.some((t) => t.toLowerCase().includes(q))
-    const matchesCategory = !selectedCategory || entry.category === selectedCategory
-    return matchesSearch && matchesCategory
-  })
+  const { entries, loading, error, addEntry } = useWiki()
 
-  const handleSaved = () => {
-    setShowAddModal(false)
-    showToast("Saved to your wiki. Nice one.")
+  const categoryCounts = useMemo(() => {
+    const counts = {}
+    entries.forEach((e) => { counts[e.category] = (counts[e.category] || 0) + 1 })
+    return counts
+  }, [entries])
+
+  const filteredEntries = useMemo(() => {
+    const q = searchQuery.toLowerCase()
+    return entries.filter((entry) => {
+      const matchesSearch =
+        !q ||
+        entry.title.toLowerCase().includes(q) ||
+        entry.body.toLowerCase().includes(q) ||
+        (entry.tags || []).some((t) => t.toLowerCase().includes(q))
+      const matchesCategory = !selectedCategory || entry.category === selectedCategory
+      return matchesSearch && matchesCategory
+    })
+  }, [entries, searchQuery, selectedCategory])
+
+  const handleSaved = async (entryData) => {
+    try {
+      await addEntry(entryData)
+      setShowAddModal(false)
+      showToast("Saved to your wiki. Nice one.")
+    } catch {
+      showToast("Couldn't save — check your connection.")
+    }
   }
 
   return (
@@ -396,7 +411,7 @@ function WikiScreen({ showToast }) {
       <div className="px-4 flex items-center justify-between mb-4">
         <div>
           <h1 className="text-gray-900 text-2xl font-bold leading-tight tracking-tight m-0">Knowledge</h1>
-          <p className="text-gray-400 text-[13px]">{wikiEntries.length} notes in your wiki</p>
+          <p className="text-gray-400 text-[13px]">{entries.length} notes in your wiki</p>
         </div>
         <button
           onClick={() => setShowAddModal(true)}
@@ -452,7 +467,9 @@ function WikiScreen({ showToast }) {
                 >
                   <span>{cat.icon}</span>
                   <span>{cat.label}</span>
-                  <span style={{ opacity: 0.6, fontSize: '11px' }}>{cat.count}</span>
+                  {categoryCounts[cat.id] > 0 && (
+                    <span style={{ opacity: 0.6, fontSize: '11px' }}>{categoryCounts[cat.id]}</span>
+                  )}
                 </button>
               )
             })}
@@ -466,9 +483,27 @@ function WikiScreen({ showToast }) {
           <p className="text-gray-400 text-[11px] font-semibold uppercase tracking-widest">Recent entries</p>
         )}
 
-        {filteredEntries.length === 0 ? (
+        {loading ? (
+          [0, 1, 2, 3].map((i) => (
+            <div key={i} className="bg-white rounded-2xl px-4 py-4 shadow-sm animate-pulse">
+              <div className="h-3.5 bg-gray-200 rounded w-3/4 mb-3" />
+              <div className="h-2.5 bg-gray-200 rounded w-full mb-1.5" />
+              <div className="h-2.5 bg-gray-200 rounded w-2/3 mb-3" />
+              <div className="flex gap-2">
+                <div className="h-4 w-20 bg-gray-200 rounded-full" />
+                <div className="h-4 w-16 bg-gray-200 rounded-full" />
+              </div>
+            </div>
+          ))
+        ) : error ? (
+          <p className="text-red-400 text-[14px] text-center py-10">
+            Couldn't load your wiki — check your connection.
+          </p>
+        ) : filteredEntries.length === 0 ? (
           <p className="text-gray-400 text-[14px] text-center py-10">
-            Nothing matching "{searchQuery}" yet
+            {searchQuery
+              ? `Nothing matching "${searchQuery}" yet`
+              : 'No entries yet — tap Add note to get started.'}
           </p>
         ) : (
           filteredEntries.map((entry) => {
@@ -510,7 +545,7 @@ function WikiScreen({ showToast }) {
   )
 }
 
-// ─── Bottom nav ─────────────────────────────────────────────────────────────
+// ─── Bottom nav ───────────────────────────────────────────────────────────────
 
 const NAV_TABS = [
   {
@@ -604,7 +639,7 @@ function BottomNav({ active, onNav }) {
   )
 }
 
-// ─── Toast ──────────────────────────────────────────────────────────────────
+// ─── Toast ────────────────────────────────────────────────────────────────────
 
 function Toast({ message, visible }) {
   return (
@@ -623,12 +658,14 @@ function Toast({ message, visible }) {
   )
 }
 
-// ─── App ────────────────────────────────────────────────────────────────────
+// ─── App ──────────────────────────────────────────────────────────────────────
 
 export default function App() {
   const [activeNav, setActiveNav] = useState('home')
   const [insightDismissed, setInsightDismissed] = useState(false)
   const [toast, setToast] = useState({ visible: false, message: '' })
+
+  const { stats, activity, insight, loading: dashboardLoading, error: dashboardError } = useDashboard()
 
   const showToast = (message) => {
     setToast({ visible: true, message })
@@ -637,7 +674,7 @@ export default function App() {
 
   const handleInsightYes = () => {
     setInsightDismissed(true)
-    showToast("On it — chasing Dave now. I'll let you know when he replies.")
+    showToast("On it — chasing them now. I'll let you know when they reply.")
   }
 
   const handleInsightLater = () => {
@@ -651,7 +688,9 @@ export default function App() {
       quote:    "Who's the quote for and what are you doing?",
       chase:    "Chasing 3 unpaid invoices now — Mrs Jones (£480), Gary at No.6 (£215), Riverside Letting Co (£1,455).",
       schedule: "You've got 6 jobs this week. First up: 22 Brook Lane tomorrow at 8am.",
-      summary:  `${stats.monthRevenue} in so far this month across ${stats.jobsThisMonth} jobs. ${stats.outstanding} still outstanding — want me to chase any of it?`,
+      summary:  stats
+        ? `${stats.monthRevenue} in so far this month across ${stats.jobsThisMonth} jobs. ${stats.outstanding} still outstanding — want me to chase any of it?`
+        : "Loading your summary...",
     }
     showToast(responses[action.id])
   }
@@ -686,14 +725,21 @@ export default function App() {
 
           {/* Insight card — first thing visible, above stats */}
           <InsightCard
+            insight={insight}
             onYes={handleInsightYes}
             onLater={handleInsightLater}
             dismissed={insightDismissed}
           />
 
-          <StatsRow />
+          {dashboardError && (
+            <div className="mx-4 mt-4 rounded-2xl bg-red-50 px-4 py-3">
+              <p className="text-red-500 text-[13px]">Couldn't load dashboard data — check your Supabase connection.</p>
+              <p className="text-red-400 text-[11px] mt-0.5 font-mono break-all">{dashboardError}</p>
+            </div>
+          )}
+          <StatsRow stats={stats} loading={dashboardLoading} />
           <QuickActions onAction={handleQuickAction} />
-          <ActivityFeed />
+          <ActivityFeed activity={activity} loading={dashboardLoading} />
         </>
       )}
 
